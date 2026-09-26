@@ -7,6 +7,7 @@ const NetworkUi=(()=>{
  const selectionKey='homeyBackupCenter.network.selected';
  function rememberSelection(){try{if(selected)localStorage.setItem(selectionKey,selected);else localStorage.removeItem(selectionKey);}catch(_){/* Storage can be unavailable in embedded settings views. */}}
  const label=(en,nl)=>BackupI18n.getLanguage()==='nl'?nl:en;
+ function retentionControls(){const enabled=el('net-retentionEnabled').checked;for(const key of ['retentionDays','minimumBackupsToKeep'])el('net-'+key).disabled=!enabled;}
  function protocol(){
   const type=el('net-type').value,smb=type==='smb',sftp=type==='sftp',ftp=type==='ftp';
   for(const key of ['share','domain'])el('net-'+key).parentElement.hidden=!smb;
@@ -31,22 +32,30 @@ const NetworkUi=(()=>{
   selected=t.id||'';
   const defaults={type:'sftp',port:22,directory:'/',timeoutMs:30000};
   for(const key of fields)el('net-'+key).value=key==='password'?'':t[key]??defaults[key]??'';
+  el('net-retentionEnabled').checked=t.retentionEnabled===true;
+  el('net-retentionDays').value=t.retentionDays??60;
+  el('net-minimumBackupsToKeep').value=t.minimumBackupsToKeep??3;
+  retentionControls();
   el('net-password').placeholder=t.hasPassword?label('Saved; leave empty to keep','Opgeslagen; leeg laten om te behouden'):'';
   el('net-select').value=selected;protocol();
  }
  function render(){const select=el('net-select');select.replaceChildren(new Option(label('New destination','Nieuwe bestemming'),''));for(const t of targets)select.add(new Option(t.name+' ('+t.type.toUpperCase()+')',t.id));select.value=selected;if(typeof window.onNetworkTargetsChanged==='function')window.onNetworkTargetsChanged(targets);}
- async function save(){const target={};for(const key of fields)target[key]=el('net-'+key).value;if(selected)target.id=selected;targets=await api('POST','/network',{target});const current=selected?targets.find(t=>t.id===selected):targets[targets.length-1];selected=current.id;rememberSelection();render();edit(current);}
+ async function save(){const target={};for(const key of fields)target[key]=el('net-'+key).value;
+  target.retentionEnabled=el('net-retentionEnabled').checked;
+  for(const [key,defaultValue] of [['retentionDays',60],['minimumBackupsToKeep',3]]){const value=Number(el('net-'+key).value);if((!Number.isSafeInteger(value)||value<1)&&target.retentionEnabled)throw Error(label('Retention values must be whole numbers of at least 1.','Bewaarwaarden moeten gehele getallen van minimaal 1 zijn.'));target[key]=Number.isSafeInteger(value)&&value>=1?value:defaultValue;}
+  if(selected)target.id=selected;targets=await api('POST','/network',{target});const current=selected?targets.find(t=>t.id===selected):targets[targets.length-1];selected=current.id;rememberSelection();render();edit(current);}
  async function poll(path){const handle=await api('POST',path,{id:selected});let done=false;
   try{for(;;){const job=await api('POST','/job',{id:handle.jobId});if(job.status==='error'){done=true;throw Error(job.error);}if(job.status==='done'){done=true;return job.result;}await new Promise(resolve=>setTimeout(resolve,700));}}
   finally{if(done)await api('POST','/job/release',{id:handle.jobId}).catch(()=>{});}
  }
  function status(text,kind=''){const s=el('network-status');s.textContent=text;s.className='hint'+(kind?' '+kind:'');s.scrollIntoView({block:'nearest',behavior:'smooth'});} async function act(fn){if(busy)return;busy=true;el('network-fields').disabled=true;status(label('Working…','Bezig…'));try{await fn();}catch(e){status('✗ '+(e.message||String(e)),'error');}finally{busy=false;el('network-fields').disabled=false;}}
  async function init(){
+  el('net-retentionEnabled').onchange=retentionControls;
   el('net-type').onchange=()=>{const type=el('net-type').value;el('net-port').value=type==='smb'?445:type==='ftp'?21:22;el('net-directory').value=type==='smb'?'':'/';protocol();};
   el('net-select').onchange=()=>{selected=el('net-select').value;rememberSelection();edit(targets.find(t=>t.id===selected));};
   el('net-save').onclick=()=>act(async()=>{status(label('Saving destination…','Bestemming opslaan…'));await save();status('✓ '+label('Destination saved.','Bestemming opgeslagen.'),'ok');});
   el('net-remove').onclick=()=>act(async()=>{if(!selected)return;targets=await api('POST','/network/remove',{id:selected});selected='';rememberSelection();render();edit();status('✓ '+label('Destination removed. Existing Flows must select another destination.','Bestemming verwijderd. Kies in bestaande Flows een andere bestemming.'),'ok');});
-  for(const [id,path] of [['net-test','/network/test'],['net-backup','/network/backup']])el(id).onclick=()=>act(async()=>{status(id==='net-test'?label('Saving settings, then testing connection and write access…','Instellingen opslaan, daarna verbinding en schrijfrechten testen…'):label('Saving settings, then creating network backup…','Instellingen opslaan, daarna netwerkback-up maken…'));await save();const result=await poll(path);status('✓ '+(result.filename?label('Backup saved: ','Back-up opgeslagen: ')+result.filename:label('Connection and write permissions verified.','Verbinding en schrijfrechten gecontroleerd.')),'ok');});
+  for(const [id,path] of [['net-test','/network/test'],['net-backup','/network/backup']])el(id).onclick=()=>act(async()=>{status(id==='net-test'?label('Saving settings, then testing connection and write access…','Instellingen opslaan, daarna verbinding en schrijfrechten testen…'):label('Saving settings, then creating network backup…','Instellingen opslaan, daarna netwerkback-up maken…'));await save();const result=await poll(path);const warning=result.retention?.errors?.length? '\n'+label('Retention cleanup had errors; the backup succeeded.','Bewaren opruimen had fouten; de back-up is geslaagd.'):'';status('✓ '+(result.filename?label('Backup saved: ','Back-up opgeslagen: ')+result.filename:label('Connection and write permissions verified.','Verbinding en schrijfrechten gecontroleerd.'))+warning,warning?'error':'ok');});
   await act(async()=>{targets=await api('GET','/network',null);let remembered='';try{remembered=localStorage.getItem(selectionKey)||'';}catch(_){/* Ignore unavailable storage. */}selected=targets.some(t=>t.id===remembered)?remembered:(targets[0]?.id||'');rememberSelection();render();edit(targets.find(t=>t.id===selected));status('');});
  }
  return {init};

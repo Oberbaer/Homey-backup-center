@@ -2,6 +2,8 @@
 const Homey = require('homey');
 const {Transfers} = require('./lib/transfers');
 const {NetworkDestinations}=require('./lib/network');
+const Retention=require('./lib/retention');
+const {webdavAdapter}=require('./lib/webdav-retention');
 const {Scheduler} = require('./lib/scheduler');
 const Jobs = require('./lib/jobs');
 const I18n = require('./settings/i18n');
@@ -155,9 +157,9 @@ function request(urlText, {method = 'GET', headers = {}, body = null, timeoutMs 
     if (!['http:', 'https:'].includes(url.protocol)) return reject(new Error(tr('WebDAV moet http:// of https:// gebruiken.')));
     const lib = url.protocol === 'https:' ? https : http;
     const req = lib.request(url, {method, headers, timeout: timeoutMs}, res => {
-      const chunks = [];
-      res.on('data', c => { if (chunks.reduce((n,b)=>n+b.length,0) < 1024 * 1024) chunks.push(c); });
-      res.on('end', () => resolve({status: res.statusCode || 0, headers: res.headers, body: Buffer.concat(chunks).toString('utf8')}));
+      const chunks = []; let size=0,truncated=false;
+      res.on('data', c => { size+=c.length;if(size<=1024*1024)chunks.push(c);else truncated=true; });
+      res.on('end', () => resolve({status: res.statusCode || 0, headers: res.headers, body: Buffer.concat(chunks).toString('utf8'),truncated}));
     });
     req.on('timeout', () => req.destroy(new Error(tr('WebDAV time-out.'))));
     req.on('error', reject);
@@ -171,7 +173,8 @@ module.exports = class HomeyBackupCenterApp extends Homey.App {
     I18n.setLanguage(this.homey.settings.get('language') || this.homey.i18n.getLanguage());
     this.transfers = new Transfers(); this.jobs = new Jobs();
     this.network = new NetworkDestinations({settings:this.homey.settings,exportBackup:()=>this.exportBackup(),
-      emit:(id,tokens,state)=>this.homey.flow.getTriggerCard(id).trigger(tokens,state)});
+      emit:(id,tokens,state)=>this.homey.flow.getTriggerCard(id).trigger(tokens,state),
+      log:(message,report)=>this.log(message,JSON.stringify(report))});
     this.registerNetworkFlows();
     this.client = await HomeyAPI.createAppAPI({homey:this.homey});
     this.writeClient=null; this.writeClientError=null;
@@ -995,7 +998,8 @@ module.exports = class HomeyBackupCenterApp extends Homey.App {
 
   getWebdavTargetsForUi() {
     const targets = this.homey.settings.get('webdavTargets') || [];
-    return targets.map(t => ({id:t.id, name:t.name, url:t.url, username:t.username || '', hasPassword:Boolean(t.password)}));
+    return targets.map(t => ({id:t.id, name:t.name, url:t.url, username:t.username || '',
+      ...Retention.settings(t),hasPassword:Boolean(t.password)}));
   }
 
   saveWebdavTargets(configText) {
@@ -1012,7 +1016,7 @@ module.exports = class HomeyBackupCenterApp extends Homey.App {
       if (!/^https?:\/\//i.test(url)) throw new Error(tr('WebDAV-URL moet met http:// of https:// beginnen.'));
       const previous = old.get(id);
       const password = t.password ? String(t.password) : (previous?.password || '');
-      return {id, name, url, username, password};
+      return {id, name, url, username, password,...Retention.settings(t)};
     });
     const schedule=this.getSchedule();
     if(schedule.enabled && !normalized.some(t=>t.id===schedule.targetId)) throw Error(tr('Disable or change the schedule before removing its WebDAV location.'));
@@ -1056,6 +1060,20 @@ module.exports = class HomeyBackupCenterApp extends Homey.App {
     };
     const response = await request(destination, {method:'PUT', headers, body, timeoutMs:30000});
     if (response.status < 200 || response.status >= 300) throw new Error(tr('Upload mislukt (HTTP ') + response.status + ').');
-    return {ok:true, status:response.status, filename, bytes:body.length, target:t.name, warnings:data.warnings || []};
+    const result={ok:true, status:response.status, filename, bytes:body.length, target:t.name, warnings:data.warnings || []};
+    const log=(message,report)=>{try{this.log(message,report);}catch(_){/* Logging cannot change upload success. */}};
+    if(t.retentionEnabled===true){
+      try {
+        const adapter=webdavAdapter(t,request,target=>this.authHeaders(target),filename);
+        result.retention=await Retention.cleanup({target:t,currentFilename:filename,list:adapter.list,remove:adapter.remove,
+          allowLegacy:true,log:(message,report)=>log(message,JSON.stringify(report))});
+      }catch(e){
+        result.retention={enabled:true,errors:[{message:'Retention listing or validation failed.'}]};
+        const code=/^[A-Z0-9_]{1,40}$/.test(e?.code||'')?e.code:'VALIDATION';
+        try{this.error('WebDAV retention listing or validation failed for '+t.name+' ('+code+')');}catch(_){/* Upload stays successful. */}
+      }
+    } else log('Retention disabled for '+t.name);
+    if(result.retention?.errors.length)result.warnings=[...result.warnings,'Retention cleanup had errors.'];
+    return result;
   }
 };

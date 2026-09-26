@@ -1098,6 +1098,12 @@ const dictionaries={
   }
 };
 Object.assign(dictionaries.nl,{
+  "Backup retention": "Back-upbewaring",
+  "Automatically delete old backups": "Oude back-ups automatisch verwijderen",
+  "Keep backups for (days)": "Back-ups bewaren (dagen)",
+  "Always keep at least (backups)": "Altijd minimaal bewaren (back-ups)",
+  "Retention values must be whole numbers of at least 1.": "Bewaarwaarden moeten gehele getallen van minimaal 1 zijn.",
+  "Retention cleanup had errors; the backup succeeded.": "Het opruimen van oude back-ups gaf fouten; de back-up is geslaagd.",
   "SMB / SFTP network backups": "SMB / SFTP-netwerkback-ups",
   "Configure a destination, test it, then select it in the “Create backup to network destination” Flow action. Use a Homey date/time trigger to schedule it. The destination folder must already exist.": "Stel een bestemming in, test deze en kies deze in de Flow-actie “Maak back-up naar netwerkbestemming”. Plan de back-up met een datum-/tijdtrigger van Homey. De doelmap moet al bestaan.",
   "Passwords stay in Homey app settings and are excluded from this app's backup exports and Flow tokens. SMB2 is for a trusted local network; this client does not provide SMB3 encryption. SFTP requires the server's SHA256 host-key fingerprint from its administrator.": "Wachtwoorden blijven in de Homey-appinstellingen en komen niet in de back-upexports of Flow-tokens. SMB2 is bedoeld voor een vertrouwd lokaal netwerk; deze client biedt geen SMB3-versleuteling. Voor SFTP is de SHA256-vingerafdruk van de serverhostsleutel nodig, op te vragen bij de beheerder.",

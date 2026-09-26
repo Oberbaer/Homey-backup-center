@@ -115,6 +115,12 @@ Copy only the `SHA256:...` value into Backup Center. If your NAS shows a colon-s
 - Saved SMB2/SFTP non-secret settings reload correctly in the settings UI.
 - Synology, QNAP and other NAS models are supported targets in principle but were **not** part of this specific end-to-end validation. SHA1 acceptance exists for NAS compatibility but was not the fingerprint format used in this field test.
 
+## Network backup retention (in development)
+
+Each SMB2, SFTP, FTP and WebDAV destination can optionally delete old Backup Center files. Retention is disabled by default, including for previously saved destinations. For example, enable retention, set **60 days**, and set **Always keep at least** to **3 backups**. After a successful backup to that destination, the app checks its folder and removes recognized, expired Backup Center files while preserving at least three valid backups and the new backup. Cleanup errors are logged and shown as warnings; they do not make the completed backup fail.
+
+Only exact Backup Center JSON filenames in the configured folder are eligible. Directories, partial files and unrelated files are ignored. SMB2, SFTP and FTP use the versioned filename containing a UUID; WebDAV also recognizes the existing timestamp-only filename format. WebDAV cleanup requires an ETag for conditional deletion. FTP servers must provide a usable file listing. Cleanup is best effort and runs only after a successful upload; it does not scan on a schedule. See [Network backup setup and limitations](docs/NETWORK-BACKUPS.md).
+
 ## 0.3.28 — SMB/SFTP and Homey Flow
 
 SMB and SFTP destinations can now be configured and tested in app settings. Schedule network backups using Homey's date/time trigger and the **Create backup to network destination** action. Completion/failure triggers and a writable-destination condition are included.

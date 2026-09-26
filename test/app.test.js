@@ -309,6 +309,34 @@ test('backup target dispatcher keeps WebDAV compatible and routes network destin
  await assert.rejects(f.app.runBackupTarget('missing'),/destination not found/i);
 });
 
+test('successful WebDAV upload stays successful when retention listing fails',async()=>{
+ const http=require('node:http');
+ const server=http.createServer((req,res)=>{if(req.method==='PUT'){req.resume();req.on('end',()=>{res.writeHead(201);res.end();});}else{res.writeHead(500);res.end();}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try{
+  const f=await fixture('en');
+  const errors=[];f.app.error=message=>errors.push(message);
+  f.state.webdavTargets=[{id:'local',name:'Test WebDAV',url:'http://127.0.0.1:'+server.address().port+'/backups/',retentionEnabled:true,retentionDays:60,minimumBackupsToKeep:3}];
+  f.app.exportBackup=async()=>({createdAt:'2026-09-24T12:00:00.000Z',warnings:[]});
+  const result=await f.app.uploadWebdav('local');
+  assert.equal(result.ok,true);assert.equal(result.status,201);assert.equal(result.retention.errors.length,1);
+  assert.equal(result.warnings[0],'Retention cleanup had errors.');
+  assert.match(errors[0],/HTTP_500/);
+  f.app.onUninit();
+ }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
+test('WebDAV retention settings default off and validate saved values',async()=>{
+ const f=await fixture('en');
+ assert.equal(f.app.getWebdavTargetsForUi()[0].retentionEnabled,false);
+ assert.equal(f.app.getWebdavTargetsForUi()[0].retentionDays,60);
+ const base={id:'koofr',name:'Test NAS',url:'https://example.invalid/backups/'};
+ let saved=f.app.saveWebdavTargets(JSON.stringify([{...base,retentionEnabled:true,retentionDays:30,minimumBackupsToKeep:2}]));
+ assert.equal(saved[0].retentionEnabled,true);assert.equal(saved[0].minimumBackupsToKeep,2);
+ assert.throws(()=>f.app.saveWebdavTargets(JSON.stringify([{...base,retentionDays:0}])),/Retention days/);
+ f.app.onUninit();
+});
+
 test('schedule accepts network destination and active network destination cannot be removed',async()=>{
  const f=await fixture();
 

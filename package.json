@@ -10,6 +10,7 @@
     "basic-ftp": "6.2.1",
     "homey-api": "3.19.2",
     "node-smb2": "1.3.5",
+    "saxes": "6.0.0",
     "ssh2-sftp-client": "12.1.1"
   },
   "scripts": {

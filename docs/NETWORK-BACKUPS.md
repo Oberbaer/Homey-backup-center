@@ -31,7 +31,17 @@ The worker has a hard timeout of 5–120 seconds (30 by default); worker termina
 
 SMB support uses SMB2. It does not implement SMB3 encryption or required SMB signing. Use a trusted LAN and a dedicated restricted account; use SFTP if the NAS requires encryption/signing. Do not weaken the NAS security policy to accommodate this client. SFTP currently supports password authentication with mandatory host-key verification; private-key authentication is not part of this build.
 
-No automatic directory creation, retention deletion, compression or network restore is included. Download a network backup and use the existing explicit restore-plan/confirmation flow. Existing WebDAV destinations and schedule settings are unchanged.
+No automatic directory creation, compression or network restore is included. Download a network backup and use the existing explicit restore-plan/confirmation flow. Existing backup schedules are unchanged.
+
+## Backup retention
+
+Retention is optional for each SMB2, SFTP, FTP and WebDAV destination and is disabled by default. Existing destinations without retention settings keep their previous behavior. Example: enable retention, set **Keep backups for: 60 days**, and **Always keep at least: 3 backups**. Both numbers must be positive whole numbers.
+
+After a successful upload, Backup Center lists the configured destination folder. It selects only exact Backup Center JSON filenames with valid UTC timestamps, checks that entries are regular files with positive size, and never selects the backup just created. An expired file is removed only while at least the configured minimum count of valid backups remains. Directories, symbolic links where identifiable, unrelated files, malformed names, and `.partial` or other temporary files are ignored. No recursive deletion is used. SMB2, SFTP and FTP retention recognizes the UUID filename format; WebDAV also recognizes its existing timestamp-only format.
+
+Cleanup errors do not invalidate a successful backup or fire the backup-failed trigger. The app logs the destination, cutoff, inspected and valid counts, selected and deleted filenames, minimum-count protection, and failures without credentials. A listing failure or missing newly uploaded file causes no deletion. Individual deletion failures are reported and processing may continue while keeping the minimum count.
+
+The transport adapters recheck file metadata immediately before deletion. SMB2 rechecks file type, size and file ID when supplied by the server; SFTP uses `lstat` to reject symlinks; FTP repeats the folder listing and checks file type and size. WebDAV requires a usable `PROPFIND` response and a strong ETag, then uses conditional `DELETE` with `If-Match`. A server that omits the required metadata will leave files untouched. WebDAV listings larger than 1 MiB are skipped. FTP and WebDAV servers differ in listing support, so test retention against the specific server before relying on it. Retention cannot protect against a remote server that reports inconsistent metadata or ignores WebDAV preconditions. Backups are never deleted on a timer or after a failed upload.
 
 ## Validation / remaining acceptance checks
 

@@ -45,7 +45,9 @@
 <div class="field"><label for="net-password">Password</label><input id="net-password" type="password" autocomplete="new-password"></div>
 <div class="field"><label for="net-fingerprint">SFTP host-key fingerprint</label><input id="net-fingerprint" type="text" autocomplete="off" placeholder="SHA256:… or SHA1:aa:bb:…"><p class="hint">Copy the host-key fingerprint shown by your NAS/server. SHA256 is recommended; SHA1 is also supported. Do not invent or generate a new key for Backup Center.</p></div>
 <div class="field"><label for="net-timeoutMs">Timeout in milliseconds (5000–120000)</label><input id="net-timeoutMs" type="number" autocomplete="off"></div>
-</div><p id="network-status" class="hint" role="status" aria-live="polite" style="white-space:pre-wrap"></p><div class="target-actions"><button id="net-save">Save destination</button><button id="net-test" class="secondary">Test connection</button><button id="net-backup">Back up now</button><button id="net-remove" class="danger">Remove destination</button></div>
+</div><div class="field"><strong>Backup retention</strong><label><input id="net-retentionEnabled" type="checkbox" style="width:auto"> Automatically delete old backups</label></div>
+<div class="grid"><div class="field"><label for="net-retentionDays">Keep backups for (days)</label><input id="net-retentionDays" type="number" min="1" step="1" value="60"></div><div class="field"><label for="net-minimumBackupsToKeep">Always keep at least (backups)</label><input id="net-minimumBackupsToKeep" type="number" min="1" step="1" value="3"></div></div>
+<p id="network-status" class="hint" role="status" aria-live="polite" style="white-space:pre-wrap"></p><div class="target-actions"><button id="net-save">Save destination</button><button id="net-test" class="secondary">Test connection</button><button id="net-backup">Back up now</button><button id="net-remove" class="danger">Remove destination</button></div>
 </fieldset>
 <p>Flow scheduling runs once per action. Use the completion/failure trigger cards for follow-up actions. The existing WebDAV schedule remains configured separately.</p>
 </section>
